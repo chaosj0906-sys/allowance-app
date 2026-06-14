@@ -402,10 +402,11 @@ input, select, textarea { font-family: inherit; font-size: 1rem; }
 
 /* ── 달력 화면 ── */
 #screen-calendar {
-  display: flex;
-  flex-direction: column;
+  display: block;
   max-width: 600px;
   margin: 0 auto;
+  /* 바텀 네비 공간 확보 */
+  padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
 }
 .cal-dow-row {
   display: grid;
@@ -436,12 +437,8 @@ input, select, textarea { font-family: inherit; font-size: 1rem; }
   text-align: center;
 }
 .cal-scroll {
-  flex: 1;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  padding: 4px 4px 80px;
-  /* iOS 스크롤 영역 확보 */
-  overscroll-behavior-y: contain;
+  /* 내부 스크롤 제거 — 페이지 전체가 자연스럽게 스크롤됨 (모바일 멈춤 현상 해결) */
+  padding: 4px 4px 20px;
 }
 .cal-grid {
   display: grid;
@@ -485,8 +482,21 @@ input, select, textarea { font-family: inherit; font-size: 1rem; }
 .cal-cell.is-sunday  .cal-day { color: var(--danger); }
 .cal-cell.is-saturday .cal-day { color: var(--accent); }
 .cal-cell.is-holiday  .cal-day { color: var(--danger); font-weight: 700; }
-.cal-cell.is-today { border-color: var(--accent); }
-.cal-cell.is-today .cal-day { color: var(--accent); }
+/* 오늘 — 날짜에 파란 원형 배경 + 셀 테두리 강조 */
+.cal-cell.is-today {
+  border-color: var(--accent);
+  background: #EFF6FF !important;
+}
+.cal-cell.is-today .cal-day {
+  color: #FFFFFF;
+  background: var(--accent);
+  width: 19px;
+  height: 19px;
+  line-height: 19px;
+  border-radius: 50%;
+  text-align: center;
+  display: inline-block;
+}
 
 /* 근무 유형 뱃지 (미니멀 칩 스타일) */
 .cal-badge {
@@ -2280,6 +2290,10 @@ input, select, textarea { font-family: inherit; font-size: 1rem; }
 
           <!-- 격주순환 설정 (biweekly·combined) -->
           <div id="roundBiweeklyDetail">
+            <div class="field-hint" id="biweeklyHint"
+              style="background:var(--accent-bg);color:var(--accent-t);padding:8px 10px;border-radius:8px;margin-bottom:10px;">
+              반 아래 1조↔2조가 격주로 번갈아 윤번을 맡습니다.
+            </div>
             <div class="field">
               <label class="field-label">기준일 입력 방식</label>
               <div class="round-mode-tabs">
@@ -2408,6 +2422,17 @@ input, select, textarea { font-family: inherit; font-size: 1rem; }
           </div>
           <label class="toggle">
             <input type="checkbox" id="useForcedRest">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">조출 자동 적용</div>
+            <div class="toggle-desc">주간·야간 근무일에 조출 1시간 자동 인정<br>(끄면 조출 없이 시작, 날짜별 개별 추가 가능)</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="useAutoEarly" checked>
             <span class="toggle-track"></span>
           </label>
         </div>
@@ -2864,6 +2889,13 @@ function onSystemChange() {
     ? '반 아래 조가 있는 편제 (예: A반 1조, A반 2조…)'
     : '조만 있는 단순 편제 (예: 1조~4조, A조~D조)';
   renderNamingSelects(isSection);
+  // 격주순환 안내 — 조 체계는 번갈 조가 없어 격주순환 불가
+  const bwHint = document.getElementById('biweeklyHint');
+  if (bwHint) {
+    bwHint.textContent = isSection
+      ? '반 아래 1조↔2조가 격주로 번갈아 윤번을 맡습니다.'
+      : '조 체계는 번갈을 조가 없어, 매 윤번일이 내 차례로 배정됩니다.';
+  }
   onShiftTypeChange();
 }
 
@@ -3882,8 +3914,11 @@ function collectConfig() {
           excludeSat:     document.getElementById('roundExcludeSat')?.checked !== false,
           excludeSun:     document.getElementById('roundExcludeSun')?.checked !== false,
           excludeHoliday: document.getElementById('roundExcludeHoliday')?.checked !== false,
+          // 조 체계(team)는 번갈을 조가 없어 격주순환 불가 → 매 윤번일 내 차례
+          noAlternate:    (document.querySelector('[name=groupSystem]:checked')?.value || 'team') === 'team',
         },
         useForcedRest: document.getElementById('useForcedRest')?.checked || false,
+        useAutoEarly:  document.getElementById('useAutoEarly')?.checked !== false,
       },
       calc: {
         useHolidayPay:  document.getElementById('useHolidayPay')?.checked || false,
@@ -3920,6 +3955,8 @@ function clearSettingsUI() {
   });
   document.getElementById('useRound').checked = false;
   document.getElementById('useForcedRest').checked = false;
+  const aeEl0 = document.getElementById('useAutoEarly');
+  if (aeEl0) aeEl0.checked = true;
   // 제외 설정 기본값 복원
   const exSat = document.getElementById('roundExcludeSat');
   const exSun = document.getElementById('roundExcludeSun');
@@ -4111,6 +4148,8 @@ function _applyConfig(c) {
         onRoundTypeChange();
       }
       document.getElementById('useForcedRest').checked = !!w.useForcedRest;
+      const aeEl = document.getElementById('useAutoEarly');
+      if (aeEl) aeEl.checked = w.useAutoEarly !== false;
       onRoundToggle();
       updateWpPreview();
     }
@@ -4501,7 +4540,9 @@ function buildMonthlyCells(year, month) {
     // 저장된 휴가·대체근무가 있으면 자동 조출 없음
     const hasStoredLeave = !!(stored?.leave);
     const isSubstitute   = !!(stored?.isSubstitute);
-    let   autoEarly     = isWorkDay && !hasStoredLeave && !isSubstitute;
+    // 설정에서 조출 자동적용이 꺼져 있으면 자동 조출 안 함
+    const autoEarlyEnabled = wp.useAutoEarly !== false;
+    let   autoEarly     = autoEarlyEnabled && isWorkDay && !hasStoredLeave && !isSubstitute;
 
     // 저장된 값이 있으면 저장값 사용, 없으면 자동 배정값
     let earlyCall;
@@ -4545,13 +4586,42 @@ function calcRoundTeam(dateStr, round, patternAnchor, teamIndex, sequence, excl)
   // excl이 없으면 round에서 추출
   const ex = excl || _roundExcl(round);
 
+  // 윤번 방식 (기본: biweekly 격주순환)
+  const type = round.type || 'biweekly';
+  // 요일한정용 지정 요일 (combined·weekday에서 사용)
+  const weekdays = round.weekdays || [];
+  // 단일조 여부 — 조 체계(teamCount<=1 또는 noAlternate)면 격주순환 대신 매번 배정
+  const noAlternate = round.noAlternate === true;
+
+  // ── weekday 방식: 지정 요일의 휴무일이면 무조건 내 윤번 ──
+  if (type === 'weekday') {
+    const dow = target.getDay();
+    if (weekdays.length === 0) return null;       // 요일 미지정 → 윤번 없음
+    if (!weekdays.includes(dow)) return null;     // 지정 요일 아님
+    // 지정 요일의 휴무일이면 배정 (조 구분 없이 내 조)
+    return teamIndex;
+  }
+
+  // ── biweekly / combined: 격주순환 카운트 ──
   let count = 0;
   let d = new Date(anchor);
   while (d <= target) {
     const ds = d.toISOString().slice(0, 10);
     const sr = calcShiftType(ds, patternAnchor, teamIndex, sequence);
-    if (sr === '휴무' && !isExcluded(ds, ex)) {
+    // 휴무일이면서 제외 대상 아님
+    let isRoundDay = (sr === '휴무' && !isExcluded(ds, ex));
+    // combined: 지정 요일 조건도 충족해야 함
+    if (isRoundDay && type === 'combined') {
+      const ddow = d.getDay();
+      if (weekdays.length === 0 || !weekdays.includes(ddow)) {
+        isRoundDay = false;
+      }
+    }
+    if (isRoundDay) {
       if (ds === dateStr) {
+        // 단일조(번갈음 없음)면 매 윤번일이 내 차례
+        if (noAlternate) return round.anchorTeam;
+        // 격주순환: 짝수번째는 기준조, 홀수번째는 반대조
         return count % 2 === 0 ? round.anchorTeam : 1 - round.anchorTeam;
       }
       count++;
