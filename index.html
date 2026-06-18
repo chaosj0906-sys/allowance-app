@@ -1998,18 +1998,22 @@ input, select, textarea { font-family: inherit; font-size: 1rem; }
           </label>
         </div>
         <div id="ob-roundDetail" style="display:none;margin-top:10px;">
-          <div class="field-row">
-            <div class="field">
-              <label class="field-label">최근 윤번 날짜</label>
-              <input class="field-input" id="ob-roundDate" type="date">
-              <div class="field-hint">마지막으로 윤번 나간 날짜</div>
-            </div>
-            <div class="field">
-              <label class="field-label">그날 조</label>
-              <select class="field-select" id="ob-roundTeam">
-                <option value="0">1조</option>
-                <option value="1">2조</option>
-              </select>
+          <div class="field">
+            <label class="field-label">최근 윤번 날짜</label>
+            <input class="field-input" id="ob-roundDate" type="date">
+            <div class="field-hint">마지막으로 윤번 나간 날짜</div>
+          </div>
+          <div class="field" style="margin-top:8px;">
+            <label class="field-label">배치 주기</label>
+            <div style="display:flex;gap:8px;">
+              <label class="sys-radio-btn">
+                <input type="radio" name="ob-roundCycle" value="biweekly" checked>
+                <span class="sys-radio-inner"><strong>격주</strong></span>
+              </label>
+              <label class="sys-radio-btn">
+                <input type="radio" name="ob-roundCycle" value="weekly">
+                <span class="sys-radio-inner"><strong>매주(반장)</strong></span>
+              </label>
             </div>
           </div>
         </div>
@@ -2292,8 +2296,31 @@ input, select, textarea { font-family: inherit; font-size: 1rem; }
           <div id="roundBiweeklyDetail">
             <div class="field-hint" id="biweeklyHint"
               style="background:var(--accent-bg);color:var(--accent-t);padding:8px 10px;border-radius:8px;margin-bottom:10px;">
-              반 아래 1조↔2조가 격주로 번갈아 윤번을 맡습니다.
+              윤번 휴무일마다 배치됩니다.
             </div>
+
+            <!-- 격주 / 매주 선택 -->
+            <div class="field">
+              <label class="field-label">배치 주기</label>
+              <div style="display:flex;gap:8px;">
+                <label class="sys-radio-btn">
+                  <input type="radio" name="roundCycle" value="biweekly" checked onchange="onRoundCalc()">
+                  <span class="sys-radio-inner">
+                    <strong>격주</strong>
+                    <small>윤번 휴무일을 한 번 걸러 배치</small>
+                  </span>
+                </label>
+                <label class="sys-radio-btn">
+                  <input type="radio" name="roundCycle" value="weekly" onchange="onRoundCalc()">
+                  <span class="sys-radio-inner">
+                    <strong>매주</strong>
+                    <small>모든 윤번 휴무일에 배치 (반장)</small>
+                  </span>
+                </label>
+              </div>
+              <div class="field-hint" id="cycleHint">격주: 윤번 가능일 중 한 번 걸러 내 차례</div>
+            </div>
+
             <div class="field">
               <label class="field-label">기준일 입력 방식</label>
               <div class="round-mode-tabs">
@@ -2312,43 +2339,21 @@ input, select, textarea { font-family: inherit; font-size: 1rem; }
 
             <!-- 방식 A: 직접 입력 -->
             <div id="roundMode-direct">
-              <div class="field-row">
-                <div class="field">
-                  <label class="field-label">첫 윤번 기준일</label>
-                  <input class="field-input" id="roundAnchorDate" type="date"
-                    onchange="onRoundCalc()">
-                  <div class="field-hint">1조가 처음 윤번 나온 날짜</div>
-                </div>
-                <div class="field">
-                  <label class="field-label">그날의 조</label>
-                  <div id="roundAnchorTeamWrap">
-                    <select class="field-select" id="roundAnchorTeam" onchange="onRoundCalc()">
-                      <option value="0">1조</option>
-                      <option value="1">2조</option>
-                    </select>
-                  </div>
-                  <div class="field-hint">기준일에 윤번 나간 조</div>
-                </div>
+              <div class="field">
+                <label class="field-label">첫 윤번 기준일</label>
+                <input class="field-input" id="roundAnchorDate" type="date"
+                  onchange="onRoundCalc()">
+                <div class="field-hint">내가 처음 윤번 나온 날짜</div>
               </div>
             </div>
 
             <!-- 방식 B: 최근 날짜 역산 -->
             <div id="roundMode-reverse" style="display:none;">
-              <div class="field-row">
-                <div class="field">
-                  <label class="field-label">최근 윤번 날짜</label>
-                  <input class="field-input" id="roundRecentDate" type="date"
-                    onchange="onRoundCalc()">
-                  <div class="field-hint">내가 마지막으로 윤번 나간 날</div>
-                </div>
-                <div class="field">
-                  <label class="field-label">그날의 조</label>
-                  <select class="field-select" id="roundRecentTeam" onchange="onRoundCalc()">
-                    <option value="0">1조</option>
-                    <option value="1">2조</option>
-                  </select>
-                  <div class="field-hint">그날 윤번 나간 조</div>
-                </div>
+              <div class="field">
+                <label class="field-label">최근 윤번 날짜</label>
+                <input class="field-input" id="roundRecentDate" type="date"
+                  onchange="onRoundCalc()">
+                <div class="field-hint">내가 마지막으로 윤번 나간 날</div>
               </div>
             </div>
           </div>
@@ -2889,13 +2894,6 @@ function onSystemChange() {
     ? '반 아래 조가 있는 편제 (예: A반 1조, A반 2조…)'
     : '조만 있는 단순 편제 (예: 1조~4조, A조~D조)';
   renderNamingSelects(isSection);
-  // 격주순환 안내 — 조 체계는 번갈 조가 없어 격주순환 불가
-  const bwHint = document.getElementById('biweeklyHint');
-  if (bwHint) {
-    bwHint.textContent = isSection
-      ? '반 아래 1조↔2조가 격주로 번갈아 윤번을 맡습니다.'
-      : '조 체계는 번갈을 조가 없어, 매 윤번일이 내 차례로 배정됩니다.';
-  }
   onShiftTypeChange();
 }
 
@@ -3504,32 +3502,35 @@ function onRoundCalc() {
   const list    = document.getElementById('roundPreviewList');
   // 간격은 교대 패턴의 휴무일이 자동 결정 — 미리보기는 달력 화면에서 구현
 
+  // 배치 주기 안내 갱신
+  const cyc = document.querySelector('[name=roundCycle]:checked')?.value || 'biweekly';
+  const cycleHintEl = document.getElementById('cycleHint');
+  if (cycleHintEl) {
+    cycleHintEl.textContent = cyc === 'weekly'
+      ? '매주: 모든 윤번 휴무일이 내 차례 (반장)'
+      : '격주: 윤번 가능일 중 한 번 걸러 내 차례';
+  }
+
   const isDirect = document.getElementById('rmt-direct')?.classList.contains('active') ?? true;
 
-  const tnEl = document.getElementById('teamNaming');
-  const teamNaming = tnEl ? tnEl.value : 'num';
-  const teamLabels = [groupName(0, teamNaming) + '조', groupName(1, teamNaming) + '조'];
-
-  let anchorDate, anchorTeam;
-
+  let anchorDate;
   if (isDirect) {
     anchorDate = document.getElementById('roundAnchorDate')?.value;
-    anchorTeam = parseInt(document.getElementById('roundAnchorTeam')?.value ?? 0);
   } else {
     const recentDate = document.getElementById('roundRecentDate')?.value;
-    const recentTeam = parseInt(document.getElementById('roundRecentTeam')?.value ?? 0);
     if (!recentDate) { preview.style.display = 'none'; return; }
-    // 역산: 최근 날짜 기준으로 1조 앵커 추정 (패턴 연동 전 임시)
     anchorDate = recentDate;
-    anchorTeam = recentTeam;
   }
 
   if (!anchorDate) { preview.style.display = 'none'; return; }
 
+  const cycle = document.querySelector('[name=roundCycle]:checked')?.value || 'biweekly';
+  const cycleLabel = cycle === 'weekly' ? '매주 (반장)' : '격주';
+
   // 설정값 저장 확인용 간단 표시
   list.innerHTML = `
     <div class="round-preview-item">
-      <span class="round-preview-badge">${teamLabels[anchorTeam]}</span>
+      <span class="round-preview-badge">${cycleLabel}</span>
       <span class="round-preview-date">기준일: ${fmtDate(anchorDate)}</span>
     </div>
     <div style="font-size:.78rem;color:var(--text-3);margin-top:4px;">
@@ -3539,23 +3540,9 @@ function onRoundCalc() {
   preview.style.display = 'block';
 }
 
-/** 조 명칭 변경 시 윤번 조 선택 옵션도 갱신 */
+/** (구) 조 명칭 변경 시 윤번 조 옵션 갱신 — 조 구분 제거로 미사용 */
 function updateRoundTeamOptions() {
-  const tnEl = document.getElementById('teamNaming');
-  const naming = tnEl ? tnEl.value : 'num';
-  const isSection = document.querySelector('[name=groupSystem]:checked')?.value === 'section';
-
-  // 반·조 체계일 때만 반 이름 고려
-  const totalTeams = (document.getElementById('shiftType')?.value === '3조2교대') ? 3 : 2;
-
-  const opts = Array.from({ length: 2 }, (_, i) =>
-    `<option value="${i}">${groupName(i, naming)}조</option>`
-  ).join('');
-
-  ['roundAnchorTeam', 'roundRecentTeam'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.innerHTML = opts;
-  });
+  // 윤번에서 조 구분을 제거하여 더 이상 갱신할 옵션 없음
 }
 
 // ════════════════════════════════════════
@@ -3907,15 +3894,13 @@ function collectConfig() {
           type:           getRoundType(),
           mode:           document.getElementById('rmt-reverse')?.classList.contains('active') ? 'reverse' : 'direct',
           anchorDate:     document.getElementById('roundAnchorDate')?.value  || '',
-          anchorTeam:     parseInt(document.getElementById('roundAnchorTeam')?.value  ?? 0),
           recentDate:     document.getElementById('roundRecentDate')?.value  || '',
-          recentTeam:     parseInt(document.getElementById('roundRecentTeam')?.value  ?? 0),
           weekdays:       getRoundWeekdays(),
           excludeSat:     document.getElementById('roundExcludeSat')?.checked !== false,
           excludeSun:     document.getElementById('roundExcludeSun')?.checked !== false,
           excludeHoliday: document.getElementById('roundExcludeHoliday')?.checked !== false,
-          // 조 체계(team)는 번갈을 조가 없어 격주순환 불가 → 매 윤번일 내 차례
-          noAlternate:    (document.querySelector('[name=groupSystem]:checked')?.value || 'team') === 'team',
+          // 배치 주기 — 격주(biweekly) 또는 매주(weekly, 반장)
+          cycle:          document.querySelector('[name=roundCycle]:checked')?.value || 'biweekly',
         },
         useForcedRest: document.getElementById('useForcedRest')?.checked || false,
         useAutoEarly:  document.getElementById('useAutoEarly')?.checked !== false,
@@ -4126,12 +4111,13 @@ function _applyConfig(c) {
         switchRoundMode(r.mode || 'direct');
         const adEl = document.getElementById('roundAnchorDate');
         if (adEl) adEl.value = r.anchorDate || '';
-        const atEl = document.getElementById('roundAnchorTeam');
-        if (atEl) atEl.value = r.anchorTeam ?? 0;
         const rdEl = document.getElementById('roundRecentDate');
         if (rdEl) rdEl.value = r.recentDate || '';
-        const rtEl = document.getElementById('roundRecentTeam');
-        if (rtEl) rtEl.value = r.recentTeam ?? 0;
+        // 배치 주기(격주/매주) 복원 — 없으면 격주 기본
+        const cyc = r.cycle || 'biweekly';
+        document.querySelectorAll('[name=roundCycle]').forEach(el => {
+          el.checked = el.value === cyc;
+        });
         renderWeekdayBtns();
         if (r.weekdays?.length) {
           document.querySelectorAll('.weekday-btn').forEach(btn => {
@@ -4489,21 +4475,18 @@ function buildMonthlyCells(year, month) {
 
   // 윤번 기준일 정규화 — direct 모드는 anchorDate, reverse 모드는 recentDate 사용
   let roundAnchorDate = '';
-  let roundAnchorTeam = 0;
   if (useRound) {
     if (round.mode === 'reverse' && round.recentDate) {
       roundAnchorDate = round.recentDate;
-      roundAnchorTeam = round.recentTeam ?? 0;
     } else if (round.anchorDate) {
       roundAnchorDate = round.anchorDate;
-      roundAnchorTeam = round.anchorTeam ?? 0;
     }
   }
-  // 정규화된 round 객체
+  // 정규화된 round 객체 (조 구분 없음, cycle 기반)
   const roundNorm = {
     ...round,
     anchorDate: roundAnchorDate,
-    anchorTeam: roundAnchorTeam,
+    cycle: round.cycle || 'biweekly',
   };
 
   for (let d = 1; d <= lastDay; d++) {
@@ -4512,17 +4495,20 @@ function buildMonthlyCells(year, month) {
     const hType   = getHolidayType(dateStr);
     const hName   = getHolidayName(dateStr);
 
+    // 패턴 기준일은 "내 패턴의 첫날"이므로 조 선택과 무관하게 계산
+    // (인천시청: 반·조는 근무지/명칭만 다르고 패턴은 모두 동일)
     let autoType = anchorDate
-      ? calcShiftType(dateStr, anchorDate, teamIndex, sequence)
+      ? calcShiftType(dateStr, anchorDate, 0, sequence)
       : '?';
 
     let roundTeam = null;
     if (autoType === '휴무' && useRound && roundAnchorDate) {
       const excl = _roundExcl(round);
       if (!isExcluded(dateStr, excl)) {
-        const assignedTeam = calcRoundTeam(dateStr, roundNorm, anchorDate, teamIndex, sequence, excl);
-        if (assignedTeam !== null && assignedTeam === teamIndex) {
-          roundTeam = assignedTeam;
+        // 윤번 해당일 여부 판정 (조 구분 없이, 격주/매주 cycle 적용)
+        const isMyRound = isRoundDay(dateStr, roundNorm, anchorDate, sequence, excl);
+        if (isMyRound) {
+          roundTeam = 0;
           autoType = '윤번';
         }
       }
@@ -4575,60 +4561,55 @@ function buildMonthlyCells(year, month) {
 }
 
 /**
- * 윤번 해당 조 계산 (기준일로부터 해당 날짜까지 유효 휴무일 카운트)
+ * 윤번 해당일 판정 (조 구분 없이, 격주/매주 cycle + 요일한정 적용)
+ * @returns {boolean} 이 날짜가 내 윤번 휴무일인지
+ *
+ * 인천시청: 반·조는 근무지/명칭만 다르고 패턴 동일 → 패턴은 teamIndex=0 고정.
+ * 윤번은 "내 휴무일 중" cycle(격주/매주)에 따라 배치.
+ *   - weekly(매주, 반장): 모든 유효 윤번 휴무일에 배치
+ *   - biweekly(격주): 유효 윤번 휴무일을 한 번 걸러 배치 (기준일부터 짝수번째)
  */
-function calcRoundTeam(dateStr, round, patternAnchor, teamIndex, sequence, excl) {
-  if (!round.anchorDate) return null;
+function isRoundDay(dateStr, round, patternAnchor, sequence, excl) {
+  if (!round.anchorDate) return false;
   const anchor = new Date(round.anchorDate);
   const target = new Date(dateStr);
-  if (anchor > target) return null;
+  if (anchor > target) return false;
 
-  // excl이 없으면 round에서 추출
   const ex = excl || _roundExcl(round);
-
-  // 윤번 방식 (기본: biweekly 격주순환)
-  const type = round.type || 'biweekly';
-  // 요일한정용 지정 요일 (combined·weekday에서 사용)
+  const type     = round.type   || 'biweekly';
+  const cycle    = round.cycle  || 'biweekly';
   const weekdays = round.weekdays || [];
-  // 단일조 여부 — 조 체계(teamCount<=1 또는 noAlternate)면 격주순환 대신 매번 배정
-  const noAlternate = round.noAlternate === true;
 
-  // ── weekday 방식: 지정 요일의 휴무일이면 무조건 내 윤번 ──
-  if (type === 'weekday') {
-    const dow = target.getDay();
-    if (weekdays.length === 0) return null;       // 요일 미지정 → 윤번 없음
-    if (!weekdays.includes(dow)) return null;     // 지정 요일 아님
-    // 지정 요일의 휴무일이면 배정 (조 구분 없이 내 조)
-    return teamIndex;
-  }
+  // 특정 날짜가 "유효 윤번 휴무일"인지 (패턴은 조 무관 teamIndex=0)
+  const isValidRoundSlot = (ds, dObj) => {
+    const sr = calcShiftType(ds, patternAnchor, 0, sequence);
+    if (sr !== '휴무' || isExcluded(ds, ex)) return false;
+    // 요일한정 / 조합: 지정 요일 조건 충족 필요
+    if (type === 'weekday' || type === 'combined') {
+      const dow = dObj.getDay();
+      if (weekdays.length === 0 || !weekdays.includes(dow)) return false;
+    }
+    return true;
+  };
 
-  // ── biweekly / combined: 격주순환 카운트 ──
+  // 대상일이 유효 윤번 슬롯이 아니면 윤번 아님
+  if (!isValidRoundSlot(dateStr, target)) return false;
+
+  // 매주(반장): 유효 슬롯이면 모두 내 차례
+  if (cycle === 'weekly') return true;
+
+  // 격주: 기준일부터 유효 슬롯을 세어 짝수번째(0,2,4…)만 내 차례
   let count = 0;
   let d = new Date(anchor);
   while (d <= target) {
     const ds = d.toISOString().slice(0, 10);
-    const sr = calcShiftType(ds, patternAnchor, teamIndex, sequence);
-    // 휴무일이면서 제외 대상 아님
-    let isRoundDay = (sr === '휴무' && !isExcluded(ds, ex));
-    // combined: 지정 요일 조건도 충족해야 함
-    if (isRoundDay && type === 'combined') {
-      const ddow = d.getDay();
-      if (weekdays.length === 0 || !weekdays.includes(ddow)) {
-        isRoundDay = false;
-      }
-    }
-    if (isRoundDay) {
-      if (ds === dateStr) {
-        // 단일조(번갈음 없음)면 매 윤번일이 내 차례
-        if (noAlternate) return round.anchorTeam;
-        // 격주순환: 짝수번째는 기준조, 홀수번째는 반대조
-        return count % 2 === 0 ? round.anchorTeam : 1 - round.anchorTeam;
-      }
+    if (isValidRoundSlot(ds, d)) {
+      if (ds === dateStr) return count % 2 === 0;
       count++;
     }
     d.setDate(d.getDate() + 1);
   }
-  return null;
+  return false;
 }
 
 // ════════════════════════════════════════
@@ -5676,15 +5657,15 @@ const INCHEON_PRESET = {
       type:           'biweekly',
       mode:           'reverse',
       anchorDate:     '',
-      anchorTeam:     0,
       recentDate:     '',
-      recentTeam:     0,
       weekdays:       [],
       excludeSat:     true,
       excludeSun:     true,
       excludeHoliday: true,
+      cycle:          'biweekly',
     },
     useForcedRest: false,
+    useAutoEarly:  true,
   },
   calc: {
     useHolidayPay:  false,
@@ -5751,7 +5732,7 @@ function obFinish() {
   cfg.workplace.useRound = useRound;
   if (useRound) {
     cfg.workplace.round.recentDate = document.getElementById('ob-roundDate').value || '';
-    cfg.workplace.round.recentTeam = parseInt(document.getElementById('ob-roundTeam').value);
+    cfg.workplace.round.cycle = document.querySelector('[name=ob-roundCycle]:checked')?.value || 'biweekly';
     cfg.workplace.round.mode = 'reverse';
   }
 
