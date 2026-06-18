@@ -4364,7 +4364,9 @@ function renderMyGroupWrap(totalTeams) {
     const secOpts  = Array.from({ length: sectionCount }, (_, i) =>
       `<option value="${i}">${groupName(i, sectionNaming)}반</option>`
     ).join('');
-    const teamOpts = Array.from({ length: totalTeams }, (_, i) =>
+    // 반·조 체계: 한 반은 1조·2조로 구성 (소속 조는 2개 고정)
+    const teamsPerSection = 2;
+    const teamOpts = Array.from({ length: teamsPerSection }, (_, i) =>
       `<option value="${i}">${groupName(i, teamNaming)}조</option>`
     ).join('');
     wrap.innerHTML = `
