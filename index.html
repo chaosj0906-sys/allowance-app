@@ -1528,6 +1528,95 @@ input, select, textarea { font-family: inherit; font-size: 1rem; }
   padding: 12px;
   margin: 4px 0 8px;
 }
+/* 근무 순서 지정 카드 */
+.shift-order-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  padding: 12px;
+  margin: 8px 0;
+}
+.shift-order-title {
+  font-size: .82rem;
+  font-weight: 700;
+  color: var(--text-1);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.shift-order-hint {
+  font-size: .68rem;
+  font-weight: 400;
+  color: var(--text-3);
+}
+.shift-order-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+}
+.shift-order-row:last-child { border-bottom: none; }
+.shift-order-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 72px;
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.shift-order-dot {
+  width: 10px; height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.dot-day   { background: #2563EB; }
+.dot-night { background: #4F46E5; }
+.dot-off   { background: #94A3B8; }
+.dot-rest  { background: #16A34A; }
+.shift-order-input {
+  width: 56px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-s);
+  border-radius: 7px;
+  font-size: .9rem;
+  text-align: center;
+  background: var(--surface);
+  color: var(--text-1);
+  font-family: inherit;
+}
+.shift-order-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.shift-order-input:disabled {
+  background: var(--bg);
+  color: var(--text-3);
+  cursor: not-allowed;
+}
+.shift-order-day {
+  font-size: .72rem;
+  color: var(--text-3);
+}
+.shift-order-preview {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+  font-size: .74rem;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+.shift-order-preview .ord-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 8px;
+  font-size: .7rem;
+  font-weight: 600;
+  margin: 1px;
+}
 .shift-builder-title {
   font-size: .82rem;
   font-weight: 700;
@@ -2241,8 +2330,39 @@ input, select, textarea { font-family: inherit; font-size: 1rem; }
           <label class="field-label">패턴 기준일
             <span style="font-weight:400;color:var(--text-3)">(교대 계산 시작점)</span>
           </label>
-          <input class="field-input" id="anchorDate" type="date">
+          <input class="field-input" id="anchorDate" type="date" onchange="onAnchorChange()">
           <div class="field-hint" id="anchorHint">이 날짜가 1조 패턴의 첫날이 됩니다</div>
+        </div>
+
+        <!-- 기준일 지정 방식 (반·조 체계에서만) -->
+        <div class="field" id="anchorModeWrap" style="display:none;">
+          <label class="field-label">기준일 지정 방식</label>
+          <div style="display:flex;gap:8px;">
+            <label class="sys-radio-btn">
+              <input type="radio" name="anchorMode" value="simple" checked onchange="onAnchorModeChange()">
+              <span class="sys-radio-inner">
+                <strong>간편</strong>
+                <small>내 반 패턴만 입력</small>
+              </span>
+            </label>
+            <label class="sys-radio-btn">
+              <input type="radio" name="anchorMode" value="byassign" onchange="onAnchorModeChange()">
+              <span class="sys-radio-inner">
+                <strong>반 배치 지정</strong>
+                <small>기준일의 각 근무별 반</small>
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 반 배치 지정 (byassign 방식) -->
+        <div id="anchorAssignWrap" class="shift-order-card" style="display:none;">
+          <div class="shift-order-title">
+            기준일 반 배치
+            <span class="shift-order-hint">기준일에 각 근무를 맡는 반 선택</span>
+          </div>
+          <div id="anchorAssignRows"><!-- JS --></div>
+          <div class="shift-order-preview" id="anchorAssignPreview"></div>
         </div>
 
         <div class="section-label">특수 규칙</div>
@@ -3139,7 +3259,7 @@ function renderHcal() {
   document.getElementById('hcalTitle').textContent =
     `${hcalYear}년 ${hcalMonth}월`;
 
-  const today    = new Date().toISOString().slice(0, 10);
+  const today    = localDateStr();
   const firstDay = new Date(hcalYear, hcalMonth - 1, 1).getDay(); // 0=일
   const lastDate = new Date(hcalYear, hcalMonth, 0).getDate();
 
@@ -3417,7 +3537,7 @@ function _roundExcl(roundConfig) {
 function addDays(dateStr, n) {
   const d = new Date(dateStr);
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  return localDateStr(d);
 }
 
 /** 다음 유효일 찾기 (당일 포함, excl 설정 기준) */
@@ -3441,7 +3561,7 @@ function calcRoundDates(anchorDate, anchorTeam, interval, count = 6, excl) {
   let curTeam = anchorTeam;
 
   // 오늘 이전 날짜는 건너뜀
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateStr();
 
   for (let i = 0; i < count * 4 && result.length < count; i++) {
     if (curDate >= today) {
@@ -3476,7 +3596,7 @@ function reverseCalcAnchor(recentDate, recentTeam, interval) {
     // 2조 날짜에서 interval만큼 뒤로
     const d = new Date(recentDate);
     d.setDate(d.getDate() - interval);
-    anchorDate = d.toISOString().slice(0, 10);
+    anchorDate = localDateStr(d);
     anchorTeam = 0;
   }
   return { anchorDate, anchorTeam };
@@ -3883,7 +4003,10 @@ function collectConfig() {
         teamNaming:     document.getElementById('teamNaming')?.value    || 'num',
         mySection:      parseInt(document.getElementById('mySection')?.value ?? -1),
         myTeam:         parseInt(document.getElementById('myTeam')?.value ?? 0),
-        anchorDate:     document.getElementById('anchorDate')?.value || '',
+        anchorDate:     getEffectiveAnchorDate(),
+        anchorMode:     document.querySelector('[name=anchorMode]:checked')?.value || 'simple',
+        anchorAssign:   JSON.parse(JSON.stringify(anchorAssign || {})),
+        anchorBaseDate: document.getElementById('anchorDate')?.value || '',
         dayHours:       parseInt(document.getElementById('dayHours')?.value) || 9,
         nightHours:     parseInt(document.getElementById('nightHours')?.value) || 15,
         nightZoneHours: parseInt(document.getElementById('nightZoneHours')?.value) || 8,
@@ -4094,7 +4217,19 @@ function _applyConfig(c) {
       }
       const teamEl = document.getElementById('myTeam');
       if (teamEl && w.myTeam >= 0) teamEl.value = w.myTeam;
-      document.getElementById('anchorDate').value     = w.anchorDate || '';
+      // 기준일 — 반 배치 방식이면 사용자가 입력한 기준일(anchorBaseDate) 표시
+      const anchorMode = w.anchorMode || 'simple';
+      document.getElementById('anchorDate').value =
+        (anchorMode === 'byassign' ? (w.anchorBaseDate || w.anchorDate) : w.anchorDate) || '';
+      // 반 배치 방식·데이터 복원
+      anchorAssign = w.anchorAssign ? JSON.parse(JSON.stringify(w.anchorAssign)) : {};
+      document.querySelectorAll('[name=anchorMode]').forEach(el => {
+        el.checked = el.value === anchorMode;
+      });
+      // 역산값 보관
+      if (anchorMode === 'byassign') {
+        document.getElementById('anchorDate').dataset.computedAnchor = w.anchorDate || '';
+      }
       document.getElementById('dayHours').value       = w.dayHours ?? 9;
       document.getElementById('nightHours').value     = w.nightHours ?? 15;
       document.getElementById('nightZoneHours').value = w.nightZoneHours ?? 8;
@@ -4137,6 +4272,7 @@ function _applyConfig(c) {
       const aeEl = document.getElementById('useAutoEarly');
       if (aeEl) aeEl.checked = w.useAutoEarly !== false;
       onRoundToggle();
+      updateAnchorHint();
       updateWpPreview();
     }
     if (c.calc) {
@@ -4282,6 +4418,7 @@ function renderShiftPreview(val) {
     <span style="color:var(--text-3);font-size:.72rem;">(${preset.sequence.length}일 주기 · ${preset.teamCount}조)</span>`;
 }
 
+
 /** 패턴 빌더 렌더 */
 function renderPatternBuilder() {
   const seq  = customPattern.sequence;
@@ -4320,6 +4457,18 @@ function patternRemove(idx) {
 }
 
 /**
+ * 로컬(기기 시각) 기준 YYYY-MM-DD 문자열 반환
+ * toISOString()은 UTC 기준이라 한국(UTC+9)에서 자정~09시에 전날로 표시되는 문제 해결
+ * @param {Date} [d] 날짜 객체 (없으면 현재)
+ */
+function localDateStr(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/**
  * 특정 날짜의 교대 근무 유형 계산 (sequence 배열 기반)
  * @param {string} dateStr    "YYYY-MM-DD"
  * @param {string} anchorDate 기준일
@@ -4330,7 +4479,7 @@ function calcShiftType(dateStr, anchorDate, teamIndex, sequence) {
   if (!anchorDate || !sequence?.length) return '?';
   const cycleLen = sequence.length;
   const diffDays = Math.round(
-    (new Date(dateStr) - new Date(anchorDate)) / 86400000
+    (new Date(dateStr + 'T00:00:00') - new Date(anchorDate + 'T00:00:00')) / 86400000
   );
   const baseOffset = ((diffDays % cycleLen) + cycleLen) % cycleLen;
   const myOffset   = (baseOffset + teamIndex) % cycleLen;
@@ -4391,6 +4540,166 @@ function renderMyGroupWrap(totalTeams) {
 
 function updateAnchorHint() {
   // renderMyGroupWrap 내부에서 처리됨
+  // 반·조 체계일 때 기준일 지정 방식 선택 표시
+  const isSection = document.querySelector('[name=groupSystem]:checked')?.value === 'section';
+  const modeWrap = document.getElementById('anchorModeWrap');
+  if (modeWrap) modeWrap.style.display = isSection ? '' : 'none';
+  if (!isSection) {
+    const aw = document.getElementById('anchorAssignWrap');
+    if (aw) aw.style.display = 'none';
+  } else {
+    onAnchorModeChange();
+  }
+}
+
+/** 기준일 변경 시 — 반 배치 미리보기 갱신 */
+function onAnchorChange() {
+  const mode = document.querySelector('[name=anchorMode]:checked')?.value || 'simple';
+  if (mode === 'byassign') { recomputeAnchorFromAssign(); renderAnchorAssignPreview(); }
+}
+
+/**
+ * 실제 계산에 쓸 anchorDate 반환
+ * - 간편 방식: 입력한 anchorDate 그대로
+ * - 반 배치 방식: 반 배치로 역산한 값 (computedAnchor)
+ */
+function getEffectiveAnchorDate() {
+  const mode = document.querySelector('[name=anchorMode]:checked')?.value || 'simple';
+  const adEl = document.getElementById('anchorDate');
+  if (mode === 'byassign') {
+    recomputeAnchorFromAssign();
+    return adEl?.dataset.computedAnchor || adEl?.value || '';
+  }
+  return adEl?.value || '';
+}
+
+/** 기준일 지정 방식 전환 (간편 / 반 배치) */
+function onAnchorModeChange() {
+  const mode = document.querySelector('[name=anchorMode]:checked')?.value || 'simple';
+  const assignWrap = document.getElementById('anchorAssignWrap');
+  if (assignWrap) assignWrap.style.display = mode === 'byassign' ? '' : 'none';
+  if (mode === 'byassign') renderAnchorAssign();
+}
+
+// 기준일 반 배치 상태: { '주간':sectionIdx, '야간':..., '비번':..., '휴무':... }
+let anchorAssign = {};
+
+/** 반 배치 입력란 렌더 */
+function renderAnchorAssign() {
+  const rowsEl = document.getElementById('anchorAssignRows');
+  if (!rowsEl) return;
+
+  const val = document.getElementById('shiftType')?.value || '4조2교대_주야비휴';
+  const is3team = val.startsWith('3조');
+  const { sequence } = getCurrentPattern();
+  // 패턴에 등장하는 근무 유형 (중복 제거, 순서 유지)
+  const uniqueTypes = [...new Set(sequence)];
+
+  const sectionCount = parseInt(document.getElementById('sectionCount')?.value) || 4;
+  const snEl = document.getElementById('sectionNaming');
+  const sectionNaming = snEl ? snEl.value : 'alpha';
+
+  const TYPE_DOT = { '주간':'dot-day','야간':'dot-night','비번':'dot-off','휴무':'dot-rest' };
+
+  rowsEl.innerHTML = uniqueTypes.map(type => {
+    const opts = Array.from({ length: sectionCount }, (_, i) =>
+      `<option value="${i}" ${anchorAssign[type]===i?'selected':''}>${groupName(i, sectionNaming)}반</option>`
+    ).join('');
+    return `
+      <div class="shift-order-row">
+        <span class="shift-order-label">
+          <span class="shift-order-dot ${TYPE_DOT[type]||'dot-off'}"></span>${type}
+        </span>
+        <select class="field-select" style="width:auto;min-width:90px;flex:0;"
+          id="assign-${type}" onchange="onAnchorAssignChange()">${opts}</select>
+      </div>`;
+  }).join('');
+
+  renderAnchorAssignPreview();
+}
+
+/** 반 배치 입력 변경 → anchorAssign 갱신 + 기준일 역산 */
+function onAnchorAssignChange() {
+  const { sequence } = getCurrentPattern();
+  const uniqueTypes = [...new Set(sequence)];
+  uniqueTypes.forEach(type => {
+    const el = document.getElementById(`assign-${type}`);
+    if (el) anchorAssign[type] = parseInt(el.value);
+  });
+  // 기준일 역산하여 anchorDate 자동 설정
+  recomputeAnchorFromAssign();
+  renderAnchorAssignPreview();
+}
+
+/**
+ * 반 배치 → 패턴 기준일(anchorDate) 역산
+ *
+ * 원리: 기준일에 "주간을 맡는 반"이 sequence[0] 위치에 있음.
+ * 내 반(mySection)이 기준일에 어느 근무인지 찾고,
+ * 그 근무의 sequence 내 위치만큼 기준일을 당기면 "내 반 패턴 첫날"이 나옴.
+ *
+ * 단, 여기서는 anchorDate를 "sequence[0](주간)을 맡는 반 기준 첫날"로 통일.
+ * calcShiftType은 teamIndex=0으로 계산하므로,
+ * anchorDate = 입력한 기준일에서 (내 반이 맡은 근무의 위치)만큼 뺀 날.
+ */
+function recomputeAnchorFromAssign() {
+  const baseDate = document.getElementById('anchorDate')?.value;
+  if (!baseDate) return;
+
+  const { sequence } = getCurrentPattern();
+  const mySection = parseInt(document.getElementById('mySection')?.value ?? 0);
+
+  // 기준일에 내 반이 맡은 근무 유형 찾기
+  let myTypeAtBase = null;
+  for (const [type, secIdx] of Object.entries(anchorAssign)) {
+    if (secIdx === mySection) { myTypeAtBase = type; break; }
+  }
+  if (!myTypeAtBase) return;  // 내 반이 배치에 없음
+
+  // 그 근무가 sequence에서 처음 등장하는 위치
+  const posInSeq = sequence.indexOf(myTypeAtBase);
+  if (posInSeq < 0) return;
+
+  // anchorDate = 기준일 - posInSeq일 (내 반 패턴 첫날로 환산)
+  const d = new Date(baseDate + 'T00:00:00');
+  d.setDate(d.getDate() - posInSeq);
+  const computed = localDateStr(d);
+  const adEl = document.getElementById('anchorDate');
+  // 직접 덮어쓰지 않고 내부 계산용으로만 — 표시는 사용자가 입력한 baseDate 유지
+  adEl.dataset.computedAnchor = computed;
+}
+
+/** 반 배치 미리보기 (기준일 전체 반 배치 표시) */
+function renderAnchorAssignPreview() {
+  const prevEl = document.getElementById('anchorAssignPreview');
+  if (!prevEl) return;
+  const baseDate = document.getElementById('anchorDate')?.value;
+  if (!baseDate) { prevEl.innerHTML = '<span style="color:var(--text-3)">기준일을 먼저 선택하세요</span>'; return; }
+
+  const { sequence } = getCurrentPattern();
+  const uniqueTypes = [...new Set(sequence)];
+  const snEl = document.getElementById('sectionNaming');
+  const sectionNaming = snEl ? snEl.value : 'alpha';
+  const SEQ_CLS = { '주간':'badge-day','야간':'badge-night','비번':'badge-off','휴무':'badge-rest' };
+
+  const badges = uniqueTypes.map(type => {
+    const sec = anchorAssign[type];
+    const secName = (sec !== undefined) ? groupName(sec, sectionNaming) + '반' : '–';
+    return `<span class="ord-badge ${SEQ_CLS[type]}">${type}: ${secName}</span>`;
+  }).join('');
+
+  // 내 반 확인
+  const mySection = parseInt(document.getElementById('mySection')?.value ?? 0);
+  let myType = null;
+  for (const [type, secIdx] of Object.entries(anchorAssign)) {
+    if (secIdx === mySection) { myType = type; break; }
+  }
+  const myName = groupName(mySection, sectionNaming);
+  const myInfo = myType
+    ? `<div style="margin-top:5px;color:var(--accent-t);">→ ${fmtDate(baseDate)}에 내 반(${myName}반)은 <b>${myType}</b> 근무</div>`
+    : `<div style="margin-top:5px;color:var(--warn);">→ 내 반(${myName}반)이 배치에 없습니다. 확인하세요.</div>`;
+
+  prevEl.innerHTML = `${fmtDate(baseDate)} 반 배치: ${badges}${myInfo}`;
 }
 
 /** 근무 유형별 표시 정보 */
@@ -4432,7 +4741,7 @@ function calcRoundType(dateStr, shiftResult, roundConfig) {
   if (d > target) return null;
 
   while (d <= target) {
-    const ds = d.toISOString().slice(0, 10);
+    const ds = localDateStr(d);
     const sr = calcShiftType(ds,
       roundConfig.patternAnchor,
       roundConfig.teamIndex,
@@ -4454,7 +4763,7 @@ function buildMonthlyCells(year, month) {
   const wp   = cfg?.workplace || {};
   const cells = [];
   const lastDay = new Date(year, month, 0).getDate();
-  const today   = new Date().toISOString().slice(0, 10);
+  const today   = localDateStr();
 
   const anchorDate  = wp.anchorDate  || '';
   const teamIndex   = wp.myTeam      ?? 0;
@@ -4604,7 +4913,7 @@ function isRoundDay(dateStr, round, patternAnchor, sequence, excl) {
   let count = 0;
   let d = new Date(anchor);
   while (d <= target) {
-    const ds = d.toISOString().slice(0, 10);
+    const ds = localDateStr(d);
     if (isValidRoundSlot(ds, d)) {
       if (ds === dateStr) return count % 2 === 0;
       count++;
