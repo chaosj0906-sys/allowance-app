@@ -3953,14 +3953,24 @@ function calcAppliedFrom(publishedDate, paydayBaseline = 10) {
  */
 function resolveActiveVersion(versions, accrualMonth) {
   if (!versions?.length) return null;
+  // 2차 정렬 기준: appliedFrom 같으면 → 고시일 늦은 것 → 그것도 같으면 나중 추가(id) 우선
+  const tiebreak = (a, b) => {
+    if (a.appliedFrom !== b.appliedFrom) return b.appliedFrom.localeCompare(a.appliedFrom);
+    const ap = a.published || '', bp = b.published || '';
+    if (ap !== bp) return bp.localeCompare(ap);
+    return String(b.id).localeCompare(String(a.id));
+  };
   const withAF = versions.filter(v => v.appliedFrom);
   const eligible = withAF
     .filter(v => v.appliedFrom <= accrualMonth)
-    .sort((a, b) => b.appliedFrom.localeCompare(a.appliedFrom));
+    .sort(tiebreak);
   if (eligible.length) return eligible[0];
   // 대상월이 모든 버전의 적용시작월보다 이전 → 가장 오래된(=최초) 버전 사용
   if (withAF.length) {
-    return withAF.sort((a, b) => a.appliedFrom.localeCompare(b.appliedFrom))[0];
+    return withAF.sort((a, b) => {
+      if (a.appliedFrom !== b.appliedFrom) return a.appliedFrom.localeCompare(b.appliedFrom);
+      return String(a.id).localeCompare(String(b.id));
+    })[0];
   }
   // 어떤 버전도 appliedFrom이 없음(전부 고시 전) → 배열 마지막 버전을 기본값으로
   return versions[versions.length - 1];
@@ -3971,14 +3981,14 @@ function resolveCurrentVersion(versions) {
   return resolveActiveVersion(versions, localDateStr().slice(0, 7));
 }
 
-/** 적용 시작 배너 갱신 */
+/** 적용 시작 배너 갱신 (표시 전용 — appliedFrom을 변경하지 않음) */
 function updateAppliedBanner(v) {
   const wrap  = document.getElementById('rateAppliedFromWrap');
   const banner = document.getElementById('rateAppliedBanner');
   if (!v.published) { wrap.style.display = 'none'; return; }
 
-  const applied = calcAppliedFrom(v.published);
-  v.appliedFrom = applied;
+  // 실제 적용 귀속월(수동 적용 override가 있으면 그 값)을 표시. 없으면 고시일 기준 계산값.
+  const applied = v.appliedFrom || calcAppliedFrom(v.published);
 
   wrap.style.display = 'block';
   banner.innerHTML = `
@@ -4002,6 +4012,9 @@ function onRateMetaChange() {
   if (!v) return;
   v.from      = document.getElementById('rateFrom').value;
   v.published = document.getElementById('ratePublished').value || null;
+  // 고시일을 입력/변경했을 때만 그 고시일 기준으로 appliedFrom 자동 재계산.
+  // (렌더 시에는 재계산하지 않음 — 수동 "적용" override가 지워지는 것 방지)
+  if (v.published) v.appliedFrom = calcAppliedFrom(v.published);
   updateAppliedBanner(v);
   renderVersionList();
 }
@@ -4053,7 +4066,12 @@ function applyRateVersionNow(id) {
   const v = rateVersions.find(v => v.id === id);
   if (!v) return;
   const thisMonth = localDateStr().slice(0, 7);
+  if (v.appliedFrom === thisMonth) {
+    showToast(`이미 ${thisMonth}부터 적용 중입니다.`);
+    return;
+  }
   if (!confirm(`"${v.label}"을(를) ${thisMonth} 귀속분부터 적용할까요?`)) return;
+  // 바로 적용 (실행취소 없음)
   v.appliedFrom = thisMonth;
   renderVersionList();
   renderRateTable();
