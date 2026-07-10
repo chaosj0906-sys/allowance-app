@@ -1227,6 +1227,21 @@ input, select, textarea { font-family: inherit; font-size: 1rem; }
   touch-action: manipulation;
 }
 .rate-version-del:active { background: var(--danger-bg, rgba(220,50,50,.12)); opacity: 1; }
+.rate-version-apply {
+  background: none;
+  border: 1.5px solid var(--accent);
+  color: var(--accent);
+  font-size: .74rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 5px 9px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.rate-version-apply:active { background: var(--accent-bg); }
 .rate-meta-field {
   padding: 12px 14px 4px;
 }
@@ -3059,8 +3074,7 @@ let rateVersions = [
     label: "2025년 단가",
     from:  "2025-01",          // 소급 귀속월 시작
     published: null,           // 고시일 없음 (전년도 이월)
-    appliedFrom: "2025-01",    // 실제 지급 반영 시작 귀속월
-    active: false,             // 현재 선택 여부
+    appliedFrom: "2025-01",    // 실제 지급 반영 시작 귀속월 — 자동 버전선택의 기준
     rates: {
       순경: { overtime: 10797, night: 3599, holiday: 0 },
       경장: { overtime: 11145, night: 3715, holiday: 0 },
@@ -3074,7 +3088,6 @@ let rateVersions = [
     from:  "2026-01",          // 소급 귀속월 (1월부터 소급)
     published: "2026-05-19",   // 고시일
     appliedFrom: "2026-04",    // 지급기준일(20일) 기준 → 5/20 지급분(4월 귀속)부터 적용
-    active: true,              // 현재 적용 버전
     rates: {
       순경: { overtime: 11175, night: 3725, holiday: 0 },
       경장: { overtime: 12584, night: 4195, holiday: 0 },
@@ -3801,9 +3814,12 @@ function selectGrade(grade) {
 /** 버전 목록 렌더 */
 function renderVersionList() {
   const el = document.getElementById('rateVersionList');
+  const todayMonth = localDateStr().slice(0, 7);
+  const current = resolveCurrentVersion(rateVersions); // 오늘 기준 실제 적용중인 버전
+
   el.innerHTML = rateVersions.map(v => {
     const isSelected = v.id === editingVersionId;
-    const isActive   = v.active;
+    const isActive   = current?.id === v.id;
     const metaParts  = [];
     if (v.from)      metaParts.push(`귀속월: ${v.from}~`);
     if (v.published) metaParts.push(`고시일: ${v.published}`);
@@ -3811,8 +3827,19 @@ function renderVersionList() {
     if (v.appliedFrom) metaParts.push(`적용 시작: ${v.appliedFrom}`);
 
     const tags = [];
-    if (isActive)   tags.push(`<span class="rate-tag rate-tag-active">적용중</span>`);
-    else            tags.push(`<span class="rate-tag rate-tag-pending">미적용</span>`);
+    if (isActive) {
+      tags.push(`<span class="rate-tag rate-tag-active">적용중</span>`);
+    } else if (v.appliedFrom && v.appliedFrom > todayMonth) {
+      tags.push(`<span class="rate-tag rate-tag-pending">예정(${v.appliedFrom}~)</span>`);
+    } else if (!v.appliedFrom) {
+      tags.push(`<span class="rate-tag rate-tag-pending">고시 전</span>`);
+    } else {
+      tags.push(`<span class="rate-tag rate-tag-pending">지난 단가</span>`);
+    }
+
+    const applyBtn = !isActive
+      ? `<button class="rate-version-apply" onclick="event.stopPropagation(); applyRateVersionNow('${v.id}')" title="지금부터 이 단가 적용">적용</button>`
+      : '';
 
     return `
     <div class="rate-version-item ${isSelected ? 'selected' : ''} ${isActive ? 'active-version' : ''}"
@@ -3823,6 +3850,7 @@ function renderVersionList() {
         <div class="rate-version-meta">${metaParts.join(' · ')}</div>
       </div>
       <div class="rate-version-tags">${tags.join('')}</div>
+      ${applyBtn}
       <button class="rate-version-del" onclick="event.stopPropagation(); deleteRateVersion('${v.id}')" title="이 단가표 삭제">🗑</button>
     </div>`;
   }).join('');
@@ -3843,8 +3871,18 @@ function renderRateTable() {
   // 헤더
   document.getElementById('rateEditTitle').textContent = v.label;
   const badge = document.getElementById('rateEditBadge');
-  badge.textContent = v.active ? '적용중' : '미적용';
-  badge.style.background = v.active ? 'var(--success)' : 'var(--warn)';
+  const todayMonth = localDateStr().slice(0, 7);
+  const isCurrentlyActive = resolveCurrentVersion(rateVersions)?.id === v.id;
+  if (isCurrentlyActive) {
+    badge.textContent = '적용중';
+    badge.style.background = 'var(--success)';
+  } else if (v.appliedFrom && v.appliedFrom > todayMonth) {
+    badge.textContent = `예정(${v.appliedFrom}~)`;
+    badge.style.background = 'var(--warn)';
+  } else {
+    badge.textContent = v.appliedFrom ? '지난 단가' : '고시 전';
+    badge.style.background = 'var(--warn)';
+  }
 
   // 메타 입력값
   document.getElementById('rateFrom').value      = v.from || '';
@@ -3905,6 +3943,34 @@ function calcAppliedFrom(publishedDate, paydayBaseline = 10) {
   return `${appliedYear}-${String(appliedMonth).padStart(2, '0')}`;
 }
 
+/**
+ * 정산 대상 귀속월에 적용할 단가 버전을 자동 선택.
+ * appliedFrom(적용 시작 귀속월)이 대상월 이하인 버전 중 가장 최신 것을 고른다.
+ * → 새 버전을 추가해도 appliedFrom이 아직 안 왔으면(=고시 전, 미적용) 현재 버전이 계속 쓰임.
+ * @param {Array} versions rateVersions
+ * @param {string} accrualMonth "YYYY-MM" (근무 귀속월)
+ * @returns {object|null}
+ */
+function resolveActiveVersion(versions, accrualMonth) {
+  if (!versions?.length) return null;
+  const withAF = versions.filter(v => v.appliedFrom);
+  const eligible = withAF
+    .filter(v => v.appliedFrom <= accrualMonth)
+    .sort((a, b) => b.appliedFrom.localeCompare(a.appliedFrom));
+  if (eligible.length) return eligible[0];
+  // 대상월이 모든 버전의 적용시작월보다 이전 → 가장 오래된(=최초) 버전 사용
+  if (withAF.length) {
+    return withAF.sort((a, b) => a.appliedFrom.localeCompare(b.appliedFrom))[0];
+  }
+  // 어떤 버전도 appliedFrom이 없음(전부 고시 전) → 배열 마지막 버전을 기본값으로
+  return versions[versions.length - 1];
+}
+
+/** 오늘 기준으로 실제 적용중인 버전 (목록 화면 배지 표시용) */
+function resolveCurrentVersion(versions) {
+  return resolveActiveVersion(versions, localDateStr().slice(0, 7));
+}
+
 /** 적용 시작 배너 갱신 */
 function updateAppliedBanner(v) {
   const wrap  = document.getElementById('rateAppliedFromWrap');
@@ -3950,15 +4016,10 @@ function deleteRateVersion(id) {
   if (!v) return;
   if (!confirm(`"${v.label}" 단가표를 삭제할까요?\n삭제하면 되돌릴 수 없습니다.`)) return;
 
-  const wasActive  = v.active;
   const wasEditing = (editingVersionId === id);
 
   rateVersions = rateVersions.filter(x => x.id !== id);
 
-  // 삭제된 버전이 적용중이었다면, 가장 최근(고시일/귀속월 기준 마지막) 버전을 적용중으로
-  if (wasActive && !rateVersions.some(x => x.active)) {
-    rateVersions[rateVersions.length - 1].active = true;
-  }
   // 편집 중이던 버전을 지웠으면 다른 버전 선택
   if (wasEditing) {
     editingVersionId = rateVersions[rateVersions.length - 1].id;
@@ -3977,7 +4038,6 @@ function addRateVersion() {
   rateVersions.push({
     id: newId, label: newLabel,
     from: '', published: null, appliedFrom: null,
-    active: false,
     rates: Object.fromEntries(GRADES.map(g => [g, { overtime: 0, night: 0, holiday: 0 }]))
   });
   editingVersionId = newId;
@@ -3985,11 +4045,19 @@ function addRateVersion() {
   renderRateTable();
 }
 
-/** 버전 적용 토글 — 단가 탭 외부(저장 버튼)에서도 호출 가능 */
-function setActiveVersion(id) {
-  rateVersions.forEach(v => v.active = (v.id === id));
+/**
+ * "적용" 버튼 — 이 버전을 이번 달 귀속분부터 적용되도록 appliedFrom을 세팅.
+ * 고시일 유무와 무관하게 강제로 지금부터 적용시키고 싶을 때 사용(수동 오버라이드).
+ */
+function applyRateVersionNow(id) {
+  const v = rateVersions.find(v => v.id === id);
+  if (!v) return;
+  const thisMonth = localDateStr().slice(0, 7);
+  if (!confirm(`"${v.label}"을(를) ${thisMonth} 귀속분부터 적용할까요?`)) return;
+  v.appliedFrom = thisMonth;
   renderVersionList();
   renderRateTable();
+  showToast(`"${v.label}"을(를) ${thisMonth}부터 적용합니다.`);
 }
 
 
@@ -4943,7 +5011,8 @@ function calcDayTeamAllowance(year, month, wp) {
 
   const { rows, monthlyTotalHours } = buildDayTeamWeeklyReport(records, year, month);
 
-  const activeVer  = rateVersions.find(v => v.active) || rateVersions[rateVersions.length - 1];
+  const _accrualMonth = `${year}-${String(month).padStart(2,'0')}`;
+  const activeVer  = resolveActiveVersion(rateVersions, _accrualMonth);
   const myRates    = activeVer?.rates?.[myGrade] || { overtime: 0, night: 0, holiday: 0 };
   const overtimeRate = myRates.overtime;
 
@@ -6191,7 +6260,8 @@ function calcAllowance(year, month) {
   const nightZoneHours = wp.nightZoneHours ?? 8;
 
   // 단가 — 현재 활성 버전에서 내 계급 단가 조회
-  const activeVer  = rateVersions.find(v => v.active) || rateVersions[rateVersions.length - 1];
+  const _accrualMonth = `${year}-${String(month).padStart(2,'0')}`;
+  const activeVer  = resolveActiveVersion(rateVersions, _accrualMonth);
   const myRates    = activeVer?.rates?.[myGrade] || { overtime: 0, night: 0, holiday: 0 };
   const overtimeRate = myRates.overtime;
   const nightRate    = myRates.night;
