@@ -1214,6 +1214,45 @@ input, select, textarea { font-family: inherit; font-size: 1rem; }
 .rate-version-item:last-child { border-bottom: none; }
 .rate-version-item:active { background: var(--bg); }
 .rate-version-item.selected { background: var(--accent-bg); }
+.rate-version-del {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 8px;
+  opacity: .55;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.rate-version-del:active { background: var(--danger-bg, rgba(220,50,50,.12)); opacity: 1; }
+.rate-meta-field {
+  padding: 12px 14px 4px;
+}
+.rate-meta-field label {
+  display: block;
+  font-size: .8rem;
+  font-weight: 700;
+  color: var(--text-2);
+  margin-bottom: 5px;
+}
+.rate-meta-field input[type="date"] {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  font-size: .95rem;
+  background: var(--surface);
+  color: var(--text);
+  box-sizing: border-box;
+}
+.rate-meta-hint {
+  font-size: .72rem;
+  color: var(--text-3);
+  margin-top: 5px;
+  line-height: 1.4;
+}
 .rate-version-dot {
   width: 10px; height: 10px;
   border-radius: 50%;
@@ -2409,7 +2448,7 @@ input, select, textarea { font-family: inherit; font-size: 1rem; }
 
         <div class="field">
           <label class="field-label">소속반(조)
-            <span style="font-weight:400;color:var(--text-3)">(참고용 기록, 계산에 영향 없음)</span>
+            <span style="font-weight:400;color:var(--text-3)">(참고용 기록)</span>
           </label>
           <input class="field-input" id="mySectionLabel" type="text" placeholder="예: A반1조, 2조 등">
         </div>
@@ -2679,7 +2718,7 @@ input, select, textarea { font-family: inherit; font-size: 1rem; }
           <div class="toggle-row">
             <div>
               <div class="toggle-label">주말·공휴일 예외 근무 허용</div>
-              <div class="toggle-desc">특별한 경우에만 토·일·공휴일 출퇴근 기록 입력 허용(희박한 예외)</div>
+              <div class="toggle-desc">특별한 경우에만 토·일·공휴일 출퇴근 기록 입력 허용</div>
             </div>
             <label class="toggle">
               <input type="checkbox" id="dayteamAllowException">
@@ -2732,9 +2771,13 @@ input, select, textarea { font-family: inherit; font-size: 1rem; }
       </div>
       <div class="card-body" style="padding:0 0 4px;">
 
-        <!-- 버전 메타 (숨김 — 내부 호환용) -->
+        <!-- 버전 메타 -->
         <input type="hidden" id="rateFrom">
-        <input type="hidden" id="ratePublished">
+        <div class="rate-meta-field">
+          <label for="ratePublished">고시일</label>
+          <input type="date" id="ratePublished" onchange="onRateMetaChange()">
+          <div class="rate-meta-hint">고시일을 설정하면 적용 시작 귀속월이 자동 계산됩니다. 미설정 시 '고시 전'으로 표시됩니다.</div>
+        </div>
         <div id="rateAppliedFromWrap" style="display:none;">
           <div class="rate-applied-banner" id="rateAppliedBanner"></div>
         </div>
@@ -3780,6 +3823,7 @@ function renderVersionList() {
         <div class="rate-version-meta">${metaParts.join(' · ')}</div>
       </div>
       <div class="rate-version-tags">${tags.join('')}</div>
+      <button class="rate-version-del" onclick="event.stopPropagation(); deleteRateVersion('${v.id}')" title="이 단가표 삭제">🗑</button>
     </div>`;
   }).join('');
 }
@@ -3894,6 +3938,35 @@ function onRateMetaChange() {
   v.published = document.getElementById('ratePublished').value || null;
   updateAppliedBanner(v);
   renderVersionList();
+}
+
+/** 버전 삭제 */
+function deleteRateVersion(id) {
+  if (rateVersions.length <= 1) {
+    showToast('마지막 단가표는 삭제할 수 없습니다');
+    return;
+  }
+  const v = rateVersions.find(x => x.id === id);
+  if (!v) return;
+  if (!confirm(`"${v.label}" 단가표를 삭제할까요?\n삭제하면 되돌릴 수 없습니다.`)) return;
+
+  const wasActive  = v.active;
+  const wasEditing = (editingVersionId === id);
+
+  rateVersions = rateVersions.filter(x => x.id !== id);
+
+  // 삭제된 버전이 적용중이었다면, 가장 최근(고시일/귀속월 기준 마지막) 버전을 적용중으로
+  if (wasActive && !rateVersions.some(x => x.active)) {
+    rateVersions[rateVersions.length - 1].active = true;
+  }
+  // 편집 중이던 버전을 지웠으면 다른 버전 선택
+  if (wasEditing) {
+    editingVersionId = rateVersions[rateVersions.length - 1].id;
+  }
+
+  renderVersionList();
+  renderRateTable();
+  showToast('단가표를 삭제했습니다');
 }
 
 /** 버전 추가 */
