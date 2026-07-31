@@ -5360,14 +5360,19 @@ function renderCal() {
 function earlyCallPossible(cell) {
   const ft = cell.finalType;
 
+  // 대체근무일(주간대체·야간대체)은 실제 근무일이므로 조출 가능
+  // (기저 근무유형이 비번/휴무여도 대체근무가 근무를 만들므로 조출 인정)
+  if (cell.isSubstitute) {
+    // 종일 휴가가 함께 걸린 경우만 방어적으로 차단
+    if (cell.leave && !cell.leave.half) {
+      return { possible: false, reason: `${cell.leave.type} 입력 시 조출 불가` };
+    }
+    return { possible: true, reason: null };
+  }
+
   // 근무일(주간·야간)이 아니면 불가
   if (ft !== '주간' && ft !== '야간') {
     return { possible: false, reason: '근무일(주간·야간)에만 해당' };
-  }
-
-  // 대체근무는 조출 불가
-  if (cell.isSubstitute) {
-    return { possible: false, reason: '대체근무일은 조출 불가' };
   }
 
   // 휴가 입력된 날 불가
@@ -5501,7 +5506,7 @@ function _initBsSwipe(bs) {
 /**
  * 대체근무 섹션 HTML
  * - 주간/야간대체 버튼
- * - 대체근무 설정 시 조출 자동 해제
+ * - 대체근무일에도 조출 지정 가능(공존)
  */
 function renderSubstituteSection(cell) {
   // 윤번 상태에서는 대체근무 불가
@@ -5546,7 +5551,7 @@ function bsSetSubstitute(key) {
   } else {
     bsPendingSubstitute     = true;
     bsPendingSubstituteType = key;
-    bsPendingEarly          = false;
+    // 대체근무일에도 조출을 찍을 수 있으므로 기존 조출 선택을 유지
   }
   const cell = calCells.find(c => c.dateStr === bsDate);
   if (cell) renderBsContent(cell);
