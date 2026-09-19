@@ -2888,6 +2888,29 @@ input, select, textarea { font-family: inherit; font-size: 1rem; }
       </div>
     </div>
 
+    <!-- 달력 표시 -->
+    <div class="card">
+      <div class="card-head"><span class="card-title">달력 표시</span></div>
+      <div class="card-body">
+
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">일요일 위치</div>
+            <div class="toggle-desc">교대반·주간반 달력 요일 배치에 적용</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <label style="display:flex;align-items:center;gap:4px;font-size:.85rem;cursor:pointer;">
+              <input type="radio" name="weekStart" value="mon" checked> 월요일 시작
+            </label>
+            <label style="display:flex;align-items:center;gap:4px;font-size:.85rem;cursor:pointer;">
+              <input type="radio" name="weekStart" value="sun"> 일요일 시작
+            </label>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
     <!-- 공휴일 달력 -->
     <div class="card">
       <div class="card-head">
@@ -4305,6 +4328,7 @@ function collectConfig() {
         rounding:       document.querySelector('[name=rounding]:checked')?.value || 'floor',
         halfday:        document.querySelector('[name=halfday]:checked')?.value  || 'full',
         paydayBaseline: parseInt(document.getElementById('paydayBaseline')?.value) || 10,
+        weekStart:      document.querySelector('[name=weekStart]:checked')?.value || 'mon',
       },
       rate: {
         myGrade:   myGrade,
@@ -4542,6 +4566,8 @@ function _applyConfig(c) {
       if (rEl) rEl.checked = true;
       const hEl = document.querySelector(`[name=halfday][value="${c.calc.halfday}"]`);
       if (hEl) hEl.checked = true;
+      const wsEl = document.querySelector(`[name=weekStart][value="${c.calc.weekStart || 'mon'}"]`);
+      if (wsEl) wsEl.checked = true;
     }
     if (c.rate) {
       if (c.rate.myGrade)   myGrade = c.rate.myGrade;
@@ -4754,12 +4780,31 @@ function localDateStr(d = new Date()) {
 }
 
 /**
- * 월요일 시작 달력에서 그 달 1일 앞의 빈칸 수
- * getDay(): 일=0,월=1,...,토=6 → 월요일 시작 오프셋: 월=0,화=1,...,일=6
+ * 달력에서 그 달 1일 앞의 빈칸 수
+ * getDay(): 일=0,월=1,...,토=6
+ * weekStart='mon'(기본, 월요일 시작): 월=0,화=1,...,일=6 오프셋
+ * weekStart='sun'(일요일 시작): 일=0,월=1,...,토=6 오프셋(=getDay() 그대로)
  */
-function leadingBlanks(year, month) {
+function leadingBlanks(year, month, weekStart = 'mon') {
   const dow = new Date(year, month - 1, 1).getDay();
-  return (dow + 6) % 7;
+  return weekStart === 'sun' ? dow : (dow + 6) % 7;
+}
+
+/**
+ * 교대반 달력 요일 헤더(#calDowRow) 갱신.
+ * weekStart='mon'(기본)이면 월~일, 'sun'이면 일~토 순서로 재배치.
+ * 정산열 헤더(.dt-settle-col-head)는 항상 함께 생성(표시 여부는 호출부에서 별도 토글).
+ */
+function renderCalDowHeader(weekStart = 'mon') {
+  const row = document.getElementById('calDowRow');
+  if (!row) return;
+  const order = weekStart === 'sun'
+    ? [['일','danger'],['월',''],['화',''],['수',''],['목',''],['금',''],['토','accent']]
+    : [['월',''],['화',''],['수',''],['목',''],['금',''],['토','accent'],['일','danger']];
+  const spans = order.map(([t, c]) =>
+    c ? `<span style="color:var(--${c})">${t}</span>` : `<span>${t}</span>`
+  ).join('');
+  row.innerHTML = spans + `<span class="dt-settle-col-head" style="display:none;">정산</span>`;
 }
 
 /**
@@ -5286,7 +5331,9 @@ function renderCal() {
     return;
   }
 
-  const firstDow = leadingBlanks(calYear, calMonth);
+  const weekStart = cfg?.calc?.weekStart || 'mon';
+  renderCalDowHeader(weekStart);
+  const firstDow = leadingBlanks(calYear, calMonth, weekStart);
   let html = '';
 
   // 교대반은 7열 그리드 (주간반 8열 클래스 제거)
@@ -5803,6 +5850,14 @@ function bsReset() {
 // 주간반(주간근무반) 달력 화면
 // ════════════════════════════════════════
 function renderDayTeamCal() {
+  // 주간반 정산 달력도 설정의 "일요일 위치"를 따름.
+  // - weekStart='mon'(기본): 기존 그대로 월~일 행. 법정 주(calcMonthlyDayTeamOvertime,
+  //   일~토 기준)와는 하루 어긋나게 걸치지만(기존부터의 동작) 정산열은 그 안에서 찾아 표시.
+  // - weekStart='sun': 행을 일~토로 바꾸면 법정 주 경계와 정확히 일치 → 정산열이
+  //   그 행의 마지막 날(토)에 정확히 대응(더 정합적).
+  const cfg = loadConfig();
+  const weekStart = cfg?.calc?.weekStart || 'mon';
+  renderCalDowHeader(weekStart);
   // 8열 그리드 클래스 적용 + 정산열 헤더 표시
   document.getElementById('calGrid')?.classList.add('dt-8col');
   document.getElementById('calDowRow')?.classList.add('dt-8col');
@@ -5857,17 +5912,18 @@ function renderDayTeamCal() {
     </div>`;
   };
 
-  // 월요일 시작으로 주 단위 순회: 그 달 1일이 속한 주의 월요일부터, 마지막 날이 속한 주 일요일까지
+  // 주 시작요일에 맞춰 주 단위 순회: 그 달 1일이 속한 주의 시작일부터, 마지막 날이 속한 주 끝까지
   const first = new Date(calYear, calMonth - 1, 1);
   const last  = new Date(calYear, calMonth, 0);
-  const startMon = new Date(first);
-  startMon.setDate(first.getDate() - ((first.getDay() + 6) % 7)); // 그 주 월요일
+  const startDate = new Date(first);
+  const offset = weekStart === 'sun' ? first.getDay() : ((first.getDay() + 6) % 7);
+  startDate.setDate(first.getDate() - offset); // 그 주의 시작일(일 또는 월)
 
   let html = '';
-  let cursor = new Date(startMon);
+  let cursor = new Date(startDate);
   let guard = 0;
   while (cursor <= last && guard < 40) {
-    // 한 주(월~일) 7칸
+    // 한 주 7칸(weekStart에 따라 일~토 또는 월~일)
     const weekDates = [];
     for (let i = 0; i < 7; i++) {
       const ds = localDateStr(cursor);
@@ -6732,6 +6788,7 @@ const INCHEON_PRESET = {
     rounding:       'floor',
     halfday:        'full',
     paydayBaseline: 10,
+    weekStart:      'mon',
   },
   rate: {
     myGrade:   '경사',
